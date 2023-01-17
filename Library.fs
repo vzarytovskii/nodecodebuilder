@@ -237,14 +237,14 @@ module NodeCode =
                 getAwaiter
 
             [<NoEagerConstraintApplication>]
-            member inline this.Source<'TaskLike, 'Awaiter, 'T
+            member inline _.Source<'TaskLike, 'Awaiter, 'T
                 when 'TaskLike: (member GetAwaiter: unit -> 'Awaiter)
                 and Awaiter<'T, 'Awaiter>>
                 (task: 'TaskLike) : unit -> 'Awaiter =
                 task.GetAwaiter
                 
             [<NoEagerConstraintApplication>]
-            member inline this.Source<'TaskLike, 'Awaiter, 'T
+            member inline _.Source<'TaskLike, 'Awaiter, 'T
                 when ^TaskLike: (member GetAwaiter: unit -> 'Awaiter)
                 and Awaiter<'T, 'Awaiter>>
                 ([<InlineIfLambda>] task: unit -> ^TaskLike)
