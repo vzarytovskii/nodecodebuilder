@@ -2,6 +2,9 @@
 
 namespace Internal.Utilities
 
+// Don't warn about the resumable code invocation
+#nowarn "3513"
+
 module CancellableTasks =
 
     open System
@@ -531,7 +534,7 @@ module CancellableTasks =
                 when Awaiter<'Awaiter, 'TResult1>>
                 ([<InlineIfLambda>] getAwaiter: CancellationToken -> 'Awaiter)
                 : CancellableTaskCode<_, _> =
-                this.Bind((fun ct -> getAwaiter ct), (fun v -> this.Return v))
+                this.Bind(getAwaiter, this.Return)
 
 
             [<NoEagerConstraintApplication>]
@@ -541,7 +544,7 @@ module CancellableTasks =
                     [<InlineIfLambda>] getAwaiter: CancellationToken -> 'Awaiter,
                     f
                 ) : CancellableTaskCode<'TResult2, 'TResult2> =
-                this.Bind((fun ct -> getAwaiter ct), (fun v -> this.Return(f v)))
+                this.Bind(getAwaiter, (fun v -> this.Return(f v)))
 
             /// <summary>Allows the computation expression to turn other types into CancellationToken -> 'Awaiter</summary>
             ///
