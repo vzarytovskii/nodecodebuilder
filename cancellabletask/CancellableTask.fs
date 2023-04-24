@@ -23,6 +23,10 @@ module CancellableTasks =
         and 'Awaiter: (member IsCompleted: bool)
         and 'Awaiter: (member GetResult: unit -> 'TResult)> = 'Awaiter
 
+    /// A type that looks like an Awaitable
+    type Awaitable<'Awaitable, 'Awaiter, 'TResult
+        when 'Awaitable: (member GetAwaiter: unit -> Awaiter<'Awaiter, 'TResult>)> = 'Awaitable
+
     /// Functions for Awaiters
     module Awaiter =
         /// Gets a value that indicates whether the asynchronous task has completed
@@ -32,10 +36,6 @@ module CancellableTasks =
         /// Ends the wait for the completion of the asynchronous task.
         let inline getResult<'Awaiter, 'TResult when Awaiter<'Awaiter, 'TResult>> (x: 'Awaiter) =
             x.GetResult()
-
-    /// A structure looks like an Awaitable
-    type Awaitable<'Awaitable, 'Awaiter, 'TResult
-        when 'Awaitable: (member GetAwaiter: unit -> Awaiter<'Awaiter, 'TResult>)> = 'Awaitable
 
     /// Functions for Awaitables
     module Awaitable =
