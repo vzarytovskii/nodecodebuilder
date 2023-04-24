@@ -270,7 +270,7 @@ module CancellableTasks =
             )
 
     /// Contains methods to build CancellableTasks using the F# computation expression syntax
-    [<NoComparison; NoEquality>]
+    [<Sealed; NoComparison; NoEquality>]
     type CancellableTaskBuilder(runOnBackground: bool) =
 
         inherit CancellableTaskBuilderBase()
