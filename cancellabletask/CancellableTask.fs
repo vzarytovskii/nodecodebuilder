@@ -286,7 +286,7 @@ module CancellableTasks =
         /// <summary>
         /// The entry point for the dynamic implementation of the corresponding operation. Do not use directly, only used when executing quotations that involve tasks or other reflective execution of F# code.
         /// </summary>
-        static member inline RunDynamicBase(code: CancellableTaskCode<'T, 'T>) : CancellableTask<'T> =
+        static member inline RunDynamicAux(code: CancellableTaskCode<'T, 'T>) : CancellableTask<'T> =
 
             let mutable sm = CancellableTaskStateMachine<'T>()
 
@@ -345,10 +345,10 @@ module CancellableTasks =
                         && obj.ReferenceEquals(TaskScheduler.Current, TaskScheduler.Default))
             then
                 fun (ct) ->
-                    Task.Run<'T>((fun () -> CancellableTaskBuilder.RunDynamicBase (code) (ct)), ct)
+                    Task.Run<'T>((fun () -> CancellableTaskBuilder.RunDynamicAux (code) (ct)), ct)
             else
-                CancellableTaskBuilder.RunDynamicBase(code)
-       
+                CancellableTaskBuilder.RunDynamicAux(code)
+
 
         /// Hosts the task code in a state machine and starts the task.
         member inline this.Run(code: CancellableTaskCode<'T, 'T>) : CancellableTask<'T> =
@@ -380,7 +380,7 @@ module CancellableTasks =
                             && not (isNull SynchronizationContext.Current
                                     && obj.ReferenceEquals(TaskScheduler.Current, TaskScheduler.Default))
                         then
-                        
+
                             let sm = sm // copy contents of state machine so we can capture it
 
                             fun (ct) ->
@@ -402,7 +402,7 @@ module CancellableTasks =
                                     )
                         else
                             let mutable sm = sm
-                            
+
                             fun (ct) ->
                                 if ct.IsCancellationRequested then
                                     Task.FromCanceled<_>(ct)
@@ -421,13 +421,15 @@ module CancellableTasks =
 
         /// <summary>
         /// Builds a cancellableTask using computation expression syntax.
+        /// Default behaviour when binding (v)options is to return a cacnelled task.
         /// </summary>
-        let cancellableTask = CancellableTaskBuilder(false)
+        let foregroundCancellableTask = CancellableTaskBuilder(false)
 
         /// <summary>
         /// Builds a cancellableTask using computation expression syntax which switches to execute on a background thread if not already doing so.
+        /// Default behaviour when binding (v)options is to return a cacnelled task.
         /// </summary>
-        let backgroundCancellableTask = CancellableTaskBuilder(true)
+        let cancellableTask = CancellableTaskBuilder(true)
 
     /// <exclude />
     [<AutoOpen>]
@@ -450,9 +452,9 @@ module CancellableTasks =
 
                 let mutable awaiter = getAwaiter sm.Data.CancellationToken
 
-                let cont =
-                    (CancellableTaskResumptionFunc<'TOverall>(fun sm ->
-                        let result = Awaiter.getResult awaiter
+                let cont: CancellableTaskResumptionFunc<'TOverall> =
+                    (CancellableTaskResumptionFunc<'TOverall>(fun (sm: byref<ResumableStateMachine<CancellableTaskStateMachineData<'TOverall>>>) ->
+                        let result: 'TResult1 = Awaiter.getResult awaiter
                         (continuation result).Invoke(&sm)
                     ))
 
@@ -683,7 +685,7 @@ module CancellableTasks =
 
         // High priority extensions
         type CancellableTaskBuilderBase with
-            
+
             /// <summary>
             /// Turn option into "awaitable", will return cancelled task if None
             /// </summary>
@@ -692,10 +694,7 @@ module CancellableTasks =
                 (fun (_ct: CancellationToken) ->
                     match s with
                     | Some x -> Task.FromResult<'T>(x).GetAwaiter()
-                    | None ->
-                        // TODO: This is a temporary workaround to make options work.
-                        let cancelledCt = CancellationToken(true) 
-                        Task.FromCanceled<'T>(cancelledCt).GetAwaiter()
+                    | None -> Task.FromCanceled<'T>(CancellationToken(true)).GetAwaiter()
                 )
 
             /// <summary>
@@ -706,10 +705,7 @@ module CancellableTasks =
                 (fun (_ct: CancellationToken) ->
                     match s with
                     | ValueSome x -> Task.FromResult<'T>(x).GetAwaiter()
-                    | ValueNone ->
-                        // TODO: This is a temporary workaround to make options work.
-                        let cancelledCt = CancellationToken(true) 
-                        Task.FromCanceled<'T>(cancelledCt).GetAwaiter()
+                    | ValueNone -> Task.FromCanceled<'T>(CancellationToken(true)).GetAwaiter()
                 )
 
             /// <summary>Allows the computation expression to turn other types into other types</summary>
@@ -759,7 +755,7 @@ module CancellableTasks =
             member inline _.Source(awaiter: TaskAwaiter<'TResult1>) = (fun _ct -> awaiter)
 
     /// <summary>
-    /// A set of extension methods making it possible to bind against <see cref='T:IcedTasks.CancellableTasks.CancellableTask`1'/> in async computations.
+    /// A set of extension methods making it possible to bind against <see cref='T:CancellableTask`1'/> in async computations.
     /// </summary>
     [<AutoOpen>]
     module AsyncExtenions =
@@ -776,11 +772,6 @@ module CancellableTasks =
 
             member inline this.ReturnFrom([<InlineIfLambda>] t: CancellableTask) : Async<unit> =
                 this.ReturnFrom(Async.AwaitCancellableTask t)
-
-    // There is explicitly no Binds for `CancellableTasks` in `Microsoft.FSharp.Control.TaskBuilderBase`.
-    // You need to explicitly pass in a `CancellationToken`to start it, you can use `CancellationToken.None`.
-    // Reason is I don't want people to assume cancellation is happening without the caller being explicit about where the CancellationToken came from.
-    // Similar reasoning for `IcedTasks.ColdTasks.ColdTaskBuilderBase`.
 
     /// Contains a set of standard functional helper function
     [<RequireQualifiedAccess>]
@@ -904,7 +895,7 @@ module CancellableTasks =
             cancellableTask {
                 return! unitCancellabletTask
             }
-        
+
         /// <summary>Coverts a CancellableTask\&lt;_\&gt; to a CancellableTask.</summary>
         /// <param name="ctask">The CancellableTask to convert.</param>
         /// <param name="ct">A cancellation token.</param>
@@ -918,7 +909,7 @@ module CancellableTasks =
         let inline start ct ([<InlineIfLambda>] ctask: CancellableTask<_>) = ctask ct
 
         let inline startAsTask ct ([<InlineIfLambda>] ctask: CancellableTask<_>) = (ctask ct) :> Task
-        
+
     /// <exclude />
     [<AutoOpen>]
     module MergeSourcesExtensions =
